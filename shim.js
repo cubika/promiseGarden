@@ -1,3 +1,4 @@
+// copied from https://github.com/chemdemo/promiseA/blob/master/lib/Promise.js
 
 // =============== Public Standard API =========================== //
 function Promise(resolver) {
@@ -97,7 +98,22 @@ Promise.reject = function(reason) {
 }
 
 Promise.all = function(promises) {
-	
+	var len = promises.length;
+	var promise = Promise();
+	var r = [];
+	var pending = 0;
+	var locked;
+
+	each(promises, function(p, i) {
+		p.then(function(v) {
+			r[i] = v;
+			if(++pending == len && !locked) promise.resolve(r); // resolve with [promises[0].value, promises[2].value, ...]
+		}, function(e) {
+			locked = true;
+			promise.reject(e);
+		});
+	});
+	return promise;
 }
 
 
@@ -195,4 +211,10 @@ function once(fn) {
 		fn.apply(this, arguments);
 		called = true;
 	};
+}
+
+function each(arr, iterator) {
+	for(var i=0; i<arr.length; i++) {
+		iterator(arr[i], i, arr);
+	}
 }
