@@ -18,7 +18,7 @@ function Promise(resolver) {
 }
 
 Promise.prototype.then = function(onFulfilled, onRejected) {
-	var next = this._next || (this._next = Promise());
+	var next = this._next || (this._next = Promise()); // empty promise
 	var status = this.status;
 	var x;
 
@@ -31,7 +31,7 @@ Promise.prototype.then = function(onFulfilled, onRejected) {
 
 	// promise is already done, we cannot resolve 'this' promise, but a new one
 	if('resolved' === status) {
-		if(!isFn(onFulfilled)) {
+		if(!isFn(onFulfilled)) { // may pass the resolved value directly
 			next.resolve(onFulfilled);
 		}else {
 			try{
@@ -44,6 +44,7 @@ Promise.prototype.then = function(onFulfilled, onRejected) {
 			}
 		}
 		// each then method return a new Promise
+		// be useful for chainable
 		return next;
 	}
 
@@ -100,7 +101,7 @@ Promise.all = function(promises) {
 }
 
 
-// =============== Internal Utility =========================== //
+// =============== Internal function =========================== //
 
 // resolve procedure
 // --> see: http://promisesaplus.com/
@@ -164,10 +165,34 @@ function fireQ(promise) {
 	var fn, x;
 
 	while(fn = queue.shift()) {
-		x = fn.call(promise, arg);
-		// used for chainable
-		x && resolveX(promise._next, x);
+		// call each callback(onFulfilled or onRejected)
+		x = fn.call(promise, arg); 
+		// resolve next promise with return value
+		//TODO: write some scenario
+		x && resolveX(promise._next, x); 
 	}
 
 	return promise;
+}
+
+
+// =============== Utility =========================== //
+function isFn() {
+	return 'function' === type(fn);
+}
+
+function type(obj) {
+	var o = {};
+    return o.toString.call(obj).replace(/\[object (\w+)\]/, '$1').toLowerCase();
+}
+
+// return function exactly as fn, except that it will only run once
+function once(fn) {
+	var called; //shared variable
+
+	return function() {
+		if(called) return;
+		fn.apply(this, arguments);
+		called = true;
+	};
 }
