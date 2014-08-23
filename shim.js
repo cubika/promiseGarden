@@ -1,5 +1,5 @@
-var Resolver = function() {}
 
+// =============== Public Standard API =========================== //
 function Promise(resolver) {
 	// must be used as constructor
 	if(!(this instanceof Promise)) return new Promise(resolver);
@@ -10,6 +10,7 @@ function Promise(resolver) {
 
 	this.__resolves = [];
 	this.__rejects = [];
+	// call the resolver function immediately
 	if(isFn(resolver)) {
 		resolver(this.resolve.bind(this), this.reject.bind(this));
 	}
@@ -20,26 +21,33 @@ Promise.prototype.then = function(onFulfilled, onRejected) {
 	var next = this._next || (this._next = Promise());
 	var status = this.status;
 	var x;
+
+	// store the callbacks so we can call when state changed
 	if('pending' === status) {
 		isFn(onFulfilled) && this.__resolves.push(onFulfilled);
 		isFn(onRejected) && this.__rejects.push(onRejected);
 		return next;
 	}
 
+	// promise is already done, we cannot resolve 'this' promise, but a new one
 	if('resolved' === status) {
 		if(!isFn(onFulfilled)) {
 			next.resolve(onFulfilled);
 		}else {
 			try{
+				// execute the callback
 				x = onFulfilled(this.value);
+				// resolve next with the returned promise
 				resolveX(next, x);
 			}catch(e) {
 				this.reject(e);
 			}
 		}
+		// each then method return a new Promise
 		return next;
 	}
 
+	// same as resolved
 	if('rejected' === status) {
 		if(!isFn(onRejected)) {
 			next.resolve(onRejected);
@@ -59,6 +67,7 @@ Promise.prototype.resolve = function(value) {
 	if('rejected' === this.status) throw Error('Illegal call');
 	this.status = 'resolved';
 	this.value = value;
+	// we have our value now, so we iterate all the callbacks
 	this.__resolves.length && fireQ(this);
 	return this;
 }
@@ -88,4 +97,77 @@ Promise.reject = function(reason) {
 
 Promise.all = function(promises) {
 	
+}
+
+
+// =============== Internal Utility =========================== //
+
+// resolve procedure
+// --> see: http://promisesaplus.com/
+function resolveX(promise, x) {
+	// 2.3.1
+	if(x === promise) {
+		promise.reject(new Error('TypeError'));
+	}
+	if(x instanceof Promise) { // 2.3.2
+		return resolvePromise(promise, x);
+	}else if(isThenable(x)) { // 2.3.3
+		return resolveThen(promise, x);
+	}else { // 2.3.4
+		return promise.resolve(x);
+	}
+}
+
+function resolvePromise(promise, promise2) {
+	var status = promise2.status;
+
+	if('pending' === status) { // 2.3.2.1
+		promise2.then(promise.resolve.bind(promise), promise.reject.bind(promise)); 
+	}else if('resolved' === status) { // 2.3.2.2
+		promise.resolve(promise2.value);
+	}else if('rejected' === status) { // 2.3.2.3
+		promise.reject(promise2.reason);
+	}
+}
+
+function resolveThen(promise, thenable) {
+	var called;
+	var resolve = once(function(x) {
+		if(called) return; // 2.3.3.3.3
+		resolveX(promise, x); // 2.3.3.3.1
+		called = true;
+	});
+	var reject = once(function(r) {
+		if(called) return; // 2.3.3.3.3
+		promise.reject(r); // 2.3.3.3.2
+		called = true;
+	});
+
+	try{
+		thenable.then.call(thenable, resolve, reject); // 2.3.3.3
+	}catch(e) {
+		if(!called) { // 2.3.3.3.4.1
+			throw e;
+		}else {
+			promise.reject(e); // 2.3.3.2
+		}
+	}
+
+	return promise;
+}
+
+// run all callbacks once
+function fireQ(promise) {
+	var status = promise.status;
+	var queue = promise['resolved' === status ? '_resolves' : '_rejects'];
+	var arg = promise['resolved' === status ? 'value' : 'reason'];
+	var fn, x;
+
+	while(fn = queue.shift()) {
+		x = fn.call(promise, arg);
+		// used for chainable
+		x && resolveX(promise._next, x);
+	}
+
+	return promise;
 }
