@@ -24,7 +24,10 @@
   "homepage": "https://github.com/cubika/promiseGarden",
   "dependencies": {
     "benchmark": "^1.0.0",
-    "mockjs": "^0.1.4"
+    "co": "^3.1.0",
+    "mockjs": "^0.1.4",
+    "thunkify": "^2.1.2",
+    "request": "^2.40.0"
   },
   "devDependencies": {
     "promise": "^5.0.0"
